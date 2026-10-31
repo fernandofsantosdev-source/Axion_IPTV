@@ -1,0 +1,62 @@
+.series-screen .movie-detail-label {
+  flex: 0 0 auto;
+}
+
+.series-screen .series-episode-list {
+  display: flex;
+  min-height: 0;
+  flex: 0 1 15vh;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: .55vw;
+}
+
+.series-screen .series-episode {
+  min-height: 2.45vw;
+  flex: 0 0 auto;
+  margin-bottom: .28vw;
+  padding: .38vw .5vw;
+  overflow: hidden;
+  border: 1px solid rgba(48, 73, 97, .44);
+  border-radius: .25vw;
+  background: rgba(4, 11, 19, .76);
+  color: #dce5f1;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: .73vw;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-screen .series-episode[aria-pressed="true"] {
+  border-color: rgba(0, 185, 244, .58);
+  color: #fff;
+}
+
+.series-episode-pagination {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding-top: .3vw;
+}
+
+.series-episode-pagination .movies-page-button {
+  min-width: 5.4vw;
+  font-size: .58vw;
+}
+
+.series-episode-pagination .movies-page-button:disabled {
+  opacity: .38;
+}
+
+.series-screen .series-episode.is-focused {
+  border-color: #03bdf3;
+  box-shadow: 0 0 12px rgba(0, 185, 244, .28);
+  transform: scale(1.02);
+}
+
+.series-screen .movie-play-button:disabled {
+  opacity: .42;
+}

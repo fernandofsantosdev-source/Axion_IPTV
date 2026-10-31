@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste do catálogo de séries</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/movies.css">
+  <link rel="stylesheet" href="../styles/series.css">
+</head>
+<body>
+  <main id="app-root" class="app-root"></main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script>
+    window.seriesFixtureStorage = { values: {} };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(window.seriesFixtureStorage.values, key) ?
+            window.seriesFixtureStorage.values[key] : null;
+        },
+        setItem: function (key, value) {
+          window.seriesFixtureStorage.values[key] = String(value);
+        }
+      }
+    });
+  </script>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/media-source.js"></script>
+  <script src="../scripts/series.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = document.getElementById("app-root");
+      var entries = window.NexoraMediaSource.parse(
+        "#EXTM3U\n" +
+        "#EXTINF:-1 group-title=\"Séries | Sci-Fi\",Nebula S01E02 - Novo Mundo\nhttps://media.example.test/series/2.mp4\n" +
+        "#EXTINF:-1 group-title=\"Séries | Sci-Fi\",Nebula S01E01 - Primeiro Sinal\nhttps://media.example.test/series/1.mp4\n" +
+        "#EXTINF:-1 group-title=\"Séries | Drama\",Marés Distantes S01E01 - Porto\nhttps://media.example.test/series/3.mp4\n" +
+        "#EXTINF:-1 group-title=\"Filmes\",Filme Separado\nhttps://media.example.test/movie/1.mp4\n",
+        "https://media.example.test/series-fixture.m3u");
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      window.NexoraMediaLibrary.saveProgress(entries[0].id, 30, 100);
+      window.NexoraSeries.setEntries(entries);
+      var screen = window.NexoraSeries.createScreen();
+      root.appendChild(screen);
+      assert("Agrupa episódios da mesma série e exclui filmes",
+        screen.querySelectorAll(".series-item").length === 2 &&
+        screen.querySelector(".series-item .movie-card-title").textContent === "Nebula");
+      assert("Usa o mesmo layout de catálogo em três painéis que Filmes",
+        screen.className.indexOf("movies-screen") !== -1 &&
+        !!screen.querySelector(".movies-genre-panel") &&
+        !!screen.querySelector(".movies-catalog") &&
+        !!screen.querySelector(".movies-details") &&
+        !!screen.querySelector(".movies-search"));
+      assert("Ordena episódios pela temporada e número",
+        screen.querySelectorAll(".series-episode").length === 2 &&
+        screen.querySelector(".series-episode").textContent.indexOf("S01E01") !== -1);
+      assert("Foca a série selecionada e mantém o primeiro episódio pronto",
+        screen.querySelector(".movies-genre[data-focused='true']") !== null &&
+        screen.querySelector(".series-episode[aria-pressed='true']") !== null &&
+        screen.querySelector(".series-watch-button").disabled === false);
+      assert("Retoma a série pelo episódio com progresso salvo",
+        screen.querySelector(".series-episode[aria-pressed='true']").textContent.indexOf("S01E02") !== -1 &&
+        screen.querySelector(".series-watch-button").textContent === "CONTINUAR ASSISTINDO");
+      screen.querySelector(".movie-favorite-button").click();
+      screen.querySelector('[data-genre-id="favorites"]').click();
+      assert("Salva e filtra séries favoritas",
+        screen.querySelectorAll(".series-item").length === 1 &&
+        window.NexoraMediaLibrary.getFavorites().indexOf("series-nebula") !== -1);
+      screen.querySelector('[data-genre-id="continue"]').click();
+      assert("Filtra séries com progresso para continuar assistindo",
+        screen.querySelectorAll(".series-item").length === 1 &&
+        !!screen.querySelector(".movie-card-progress"));
+      screen.querySelector('[data-genre-id="series-category-2"]').click();
+      assert("Filtra as séries pela categoria selecionada",
+        screen.querySelectorAll(".series-item").length === 1 &&
+        screen.querySelector(".series-item .movie-card-title").textContent === "Marés Distantes");
+      screen.querySelector('[data-genre-id="all"]').click();
+      var search = screen.querySelector(".movies-search");
+      search.value = "neb";
+      var inputEvent = document.createEvent("HTMLEvents");
+      inputEvent.initEvent("input", true, false);
+      search.dispatchEvent(inputEvent);
+      assert("Pesquisa séries pelo mesmo campo do catálogo de filmes",
+        screen.querySelectorAll(".series-item").length === 1 &&
+        screen.querySelector(".series-item .movie-card-title").textContent === "Nebula");
+
+      var selected = null;
+      var selectedOptions = null;
+      window.NexoraPlayerScreen = {
+        createScreen: function (entry, options) {
+          selected = entry;
+          selectedOptions = options;
+          return document.createElement("section");
+        }
+      };
+      screen.querySelector(".series-watch-button").click();
+      assert("Abre o player com o episódio selecionado",
+        selected && selected.seasonNumber === 1 && selected.episodeNumber === 2 &&
+        selectedOptions.resumePosition === 30);
+
+      window.seriesFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

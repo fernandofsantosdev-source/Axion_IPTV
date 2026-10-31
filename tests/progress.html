@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de progresso AXION</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/movies.css">
+  <link rel="stylesheet" href="../styles/player.css">
+</head>
+<body>
+  <main id="app-root" class="app-root">
+    <section class="progress-fixture-home"><button type="button">Início</button></section>
+  </main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script>
+    window.progressFixtureStorage = { values: {}, failWrites: false };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(window.progressFixtureStorage.values, key) ?
+            window.progressFixtureStorage.values[key] : null;
+        },
+        setItem: function (key, value) {
+          if (window.progressFixtureStorage.failWrites) {
+            throw new Error("quota");
+          }
+          window.progressFixtureStorage.values[key] = String(value);
+        }
+      }
+    });
+  </script>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/movies.js"></script>
+  <script src="../scripts/player-adapter.js"></script>
+  <script src="../scripts/player-screen.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var entries = [
+        { id: "progress-entry-1", title: "Filme em Progresso", category: "Drama", url: "https://media.example.test/1.mp4" },
+        { id: "progress-entry-2", title: "Fonte Indisponível", category: "Drama", url: "https://media.example.test/2.mp4" }
+      ];
+      var activeAdapter;
+      var resumePositions = [];
+      var root = window.NexoraApp.getRoot();
+      var createPlayerScreen = window.NexoraPlayerScreen.createScreen;
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      function createFakeAdapter(handlers) {
+        var adapter = {
+          handlers: handlers,
+          position: 0,
+          duration: 100,
+          seekCalls: [],
+          state: "idle",
+          open: function () {
+            adapter.state = "loading";
+            handlers.onState("loading");
+            adapter.state = "playing";
+            handlers.onState("playing");
+          },
+          play: function () {
+            adapter.state = "playing";
+            handlers.onState("playing");
+          },
+          pause: function () {
+            adapter.state = "paused";
+            handlers.onState("paused");
+          },
+          seek: function (position) {
+            adapter.position = Math.max(0, Math.min(adapter.duration, position));
+            adapter.seekCalls.push(adapter.position);
+            handlers.onProgress(adapter.position, adapter.duration);
+          },
+          getPosition: function () { return adapter.position; },
+          getDuration: function () { return adapter.duration; },
+          close: function () {
+            adapter.state = "closed";
+            handlers.onState("closed");
+          }
+        };
+        activeAdapter = adapter;
+        return adapter;
+      }
+
+      window.NexoraPlayerScreen.createScreen = function (entry, options) {
+        options = options || {};
+        options.adapterFactory = createFakeAdapter;
+        resumePositions.push(Number(options.resumePosition) || 0);
+        return createPlayerScreen(entry, options);
+      };
+
+      function showMovies() {
+        window.NexoraMovies.setEntries(entries);
+        window.NexoraApp.replaceScreen(window.NexoraMovies.createScreen());
+      }
+
+      window.NexoraMovies.setEntries(entries);
+      window.NexoraApp.mountScreen(window.NexoraMovies.createScreen());
+      root.querySelector(".movie-play-button").click();
+      assert("Abre o player integrado com o catálogo", activeAdapter.state === "playing");
+
+      activeAdapter.position = 12;
+      activeAdapter.handlers.onProgress(12, 100);
+      assert("Salva posição e duração reportadas pelo player",
+        window.NexoraMediaLibrary.getProgress()["progress-entry-1"].position === 12 &&
+        window.NexoraMediaLibrary.getProgress()["progress-entry-1"].duration === 100);
+
+      activeAdapter.position = 22;
+      root.querySelector(".player-play").click();
+      assert("Atualiza progresso ao pausar",
+        window.NexoraMediaLibrary.getProgress()["progress-entry-1"].position === 22);
+      activeAdapter.position = 26;
+      root.querySelector(".player-back").click();
+      assert("Atualiza progresso ao sair pelo controle Voltar",
+        window.NexoraMediaLibrary.getProgress()["progress-entry-1"].position === 26);
+      assert("Mostra a opção de continuar no catálogo",
+        root.querySelector(".movie-play-button").textContent === "CONTINUAR ASSISTINDO");
+
+      root.querySelector(".movie-play-button").click();
+      assert("Retoma a reprodução a partir da posição persistida",
+        resumePositions[1] === 26 && activeAdapter.seekCalls.indexOf(26) !== -1);
+      activeAdapter.position = 90;
+      activeAdapter.handlers.onProgress(90, 100);
+      assert("Remove o título ao alcançar 90 por cento",
+        !window.NexoraMediaLibrary.getProgress()["progress-entry-1"]);
+      window.NexoraApp.goBack();
+
+      window.NexoraMediaLibrary.saveProgress("progress-entry-2", 30, 100);
+      entries = [entries[0]];
+      showMovies();
+      root.querySelector('[data-genre-id="continue"]').click();
+      assert("Oculta a retomada de uma entrada que não está mais disponível",
+        root.querySelectorAll(".movie-card").length === 0 &&
+        !!window.NexoraMediaLibrary.getProgress()["progress-entry-2"]);
+
+      root.querySelector('[data-genre-id="all"]').click();
+      root.querySelector(".movie-play-button").click();
+      window.progressFixtureStorage.failWrites = true;
+      activeAdapter.position = 10;
+      activeAdapter.handlers.onProgress(10, 100);
+      assert("Exibe falha de persistência de progresso no player",
+        root.querySelector(".player-status").className.indexOf("is-error") !== -1 &&
+        root.querySelector(".player-status").textContent.indexOf("armazenamento local") !== -1);
+      window.progressFixtureStorage.failWrites = false;
+      activeAdapter.position = 16;
+      activeAdapter.handlers.onProgress(16, 100);
+      assert("Retoma a gravação quando o armazenamento volta a funcionar",
+        window.NexoraMediaLibrary.getProgress()["progress-entry-1"].position === 16);
+      window.NexoraApp.goBack();
+
+      window.progressFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste do player AXION</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/player.css">
+</head>
+<body>
+  <main id="app-root" class="app-root">
+    <section class="player-fixture-home">
+      <button type="button" data-focusable="true" data-focused="true" class="is-focused">
+        Iniciar teste local do player
+      </button>
+    </section>
+  </main>
+  <div id="test-results" role="status" aria-live="polite">Aguardando início do teste...</div>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/player-adapter.js"></script>
+  <script src="../scripts/player-screen.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var startButton = document.querySelector(".player-fixture-home button");
+      var output = document.getElementById("test-results");
+      var video = document.createElement("video");
+      var screen;
+      var playbackStarted = false;
+      var finished = false;
+      var positionBeforeSeek = 0;
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      function finish() {
+        var failed = results.filter(function (result) { return !result.passed; });
+        finished = true;
+        output.textContent = failed.length ? "FALHOU: " + failed.map(function (result) {
+          return result.name;
+        }).join(", ") : "PASSOU: " + results.length + " verificações";
+        window.playerScreenFixtureResults = results;
+      }
+
+      function testLoadingAndErrorStates() {
+        var handlers;
+        var openCount = 0;
+        var closeCount = 0;
+        var openedUrls = [];
+        var proxyRequestCount = 0;
+        window.NexoraMediaSource = {
+          hasWorkerSettings: function () { return true; },
+          createStreamProxyUrl: function () {
+            proxyRequestCount += 1;
+          }
+        };
+        var mockScreen = window.NexoraPlayerScreen.createScreen({
+          id: "mock-player-fixture",
+          title: "Teste de estados do player",
+          url: window.location.protocol + "//" + window.location.host +
+            "/tests/fixtures/axion-player-test.mp4"
+        }, {
+          adapterFactory: function (callbacks) {
+            handlers = callbacks;
+            return {
+              open: function (url) {
+                openCount += 1;
+                openedUrls.push(url);
+                handlers.onState("loading");
+              },
+              close: function () {
+                closeCount += 1;
+                handlers.onState("closed");
+              },
+              play: function () { handlers.onState("playing"); },
+              pause: function () { handlers.onState("paused"); },
+              seek: function () {},
+              getPosition: function () { return 0; },
+              getDuration: function () { return 30; }
+            };
+          }
+        });
+        window.NexoraApp.mountScreen(mockScreen);
+        assert("Exibe carregamento enquanto o adaptador abre a mídia",
+          mockScreen.querySelector(".player-status").textContent === "Carregando vídeo..." &&
+          mockScreen.querySelector(".player-play").disabled);
+        handlers.onError(new Error("Falha simulada de reprodução."));
+        assert("Falha de reprodução não solicita fallback pelo Worker",
+          openCount === 1 && proxyRequestCount === 0 &&
+          openedUrls[0] === window.location.protocol + "//" + window.location.host +
+            "/tests/fixtures/axion-player-test.mp4");
+        assert("Mostra erro explícito e oferece nova tentativa da origem",
+          mockScreen.querySelector(".player-status").textContent === "Falha simulada de reprodução." &&
+          mockScreen.querySelector(".player-status").className.indexOf("is-error") !== -1 &&
+          mockScreen.querySelector(".player-play").textContent === "TENTAR NOVAMENTE");
+        mockScreen.querySelector(".player-play").click();
+        assert("Nova tentativa usa novamente a URL direta original", openCount === 2 &&
+          openedUrls[1] === openedUrls[0] && proxyRequestCount === 0);
+        keyBack();
+        assert("Voltar fecha também o adaptador após erro", closeCount === 2);
+      }
+
+      function keyBack() {
+        var event = document.createEvent("Event");
+        event.initEvent("keydown", true, true);
+        Object.defineProperty(event, "keyCode", { get: function () { return 10009; } });
+        document.dispatchEvent(event);
+      }
+
+      video.addEventListener("playing", function () {
+        if (playbackStarted) {
+          return;
+        }
+        playbackStarted = true;
+        window.setTimeout(function () {
+          var playButton = screen.querySelector(".player-play");
+          assert("Inicia a reprodução do vídeo sintético local", !video.paused);
+          playButton.click();
+          assert("Pausa e atualiza o estado do player",
+            video.paused && screen.querySelector(".player-status").textContent === "Reprodução pausada.");
+          positionBeforeSeek = video.currentTime;
+          video.addEventListener("seeked", function onForwardSeek() {
+            video.removeEventListener("seeked", onForwardSeek, false);
+            assert("Avança dez segundos no vídeo",
+              Math.abs(video.currentTime - Math.min(positionBeforeSeek + 10, video.duration)) < 1);
+            video.addEventListener("seeked", function onBackwardSeek() {
+              video.removeEventListener("seeked", onBackwardSeek, false);
+              assert("Retorna dez segundos no vídeo",
+                Math.abs(video.currentTime - positionBeforeSeek) < 1);
+              playButton.click();
+              window.setTimeout(function () {
+                assert("Retoma a reprodução após a busca", !video.paused && video.currentTime > 0);
+                keyBack();
+                assert("Voltar retorna ao início e fecha a mídia",
+                  !!document.querySelector(".player-fixture-home") &&
+                  video.paused && !video.getAttribute("src"));
+                testLoadingAndErrorStates();
+                finish();
+              }, 700);
+            }, false);
+            screen.querySelector(".player-control:first-child").click();
+          }, false);
+          screen.querySelector(".player-control:nth-child(3)").click();
+        }, 0);
+      });
+
+      video.addEventListener("error", function () {
+        if (!finished) {
+          assert("Reproduz vídeo local sem erro do navegador", false);
+          finish();
+        }
+      });
+
+      startButton.addEventListener("click", function () {
+        var url = window.location.protocol + "//" + window.location.host +
+          "/tests/fixtures/axion-player-test.mp4";
+        screen = window.NexoraPlayerScreen.createScreen({
+          id: "local-player-fixture",
+          title: "Vídeo sintético de teste",
+          url: url
+        }, { videoElement: video });
+        window.NexoraApp.mountScreen(screen);
+        assert("O foco inicial fica no controle principal",
+          screen.querySelector(".player-play").getAttribute("data-focused") === "true");
+      });
+    }());
+  </script>
+</body>
+</html>

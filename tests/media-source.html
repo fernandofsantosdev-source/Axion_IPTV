@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de fonte M3U</title>
+</head>
+<body>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/media-source.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var requests = [];
+      var responses = [];
+      var sample = "#EXTM3U\r\n" +
+        "#EXTINF:-1 tvg-name=\"Noite Azul\" group-title=\"Cinema\",Ação & Aventura\r\n" +
+        "https://media.example.test/one.mp4\r\n" +
+        "#EXTINF:3600,Filme sem grupo\r\n" +
+        "https://media.example.test/two.mp4\r\n";
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      function FakeRequest() {
+        this.readyState = 0;
+        this.status = 0;
+        this.responseText = "";
+        this.headers = {};
+        requests.push(this);
+      }
+      FakeRequest.prototype.open = function (method, url) {
+        this.method = method;
+        this.url = url;
+      };
+      FakeRequest.prototype.setRequestHeader = function (name, value) {
+        this.headers[name] = value;
+      };
+      FakeRequest.prototype.send = function (body) {
+        this.body = body;
+        var response = responses.shift();
+        if (response.error) {
+          this.onerror();
+          return;
+        }
+        this.status = response.status;
+        this.responseText = response.body;
+        this.readyState = 4;
+        this.onreadystatechange();
+      };
+
+      window.XMLHttpRequest = FakeRequest;
+      window.AXION_CONFIG = {
+        workerUrl: "https://axion-proxy.example.workers.dev",
+        workerToken: "fixture-token-not-a-real-secret"
+      };
+      window.localStorage.removeItem("axion.media.routes.v1");
+      var parsed = window.NexoraMediaSource.parse(sample, "https://media.example.test/library.m3u");
+      assert("Analisa títulos, categoria e duração do M3U",
+        parsed.length === 2 &&
+        parsed[0].title === "Ação & Aventura" &&
+        parsed[0].category === "Cinema" &&
+        parsed[1].title === "Filme sem grupo" &&
+        parsed[1].duration === "1h 00min");
+      assert("Usa fallback neutro para dados ausentes",
+        parsed[1].category === "Sem categoria" && parsed[1].rating === "—");
+      var classified = window.NexoraMediaSource.parse(
+        "#EXTM3U\n" +
+        "#EXTINF:-1 group-title=\"Canais | Notícias\",Canal Aurora\nhttps://media.example.test/live/1.ts\n" +
+        "#EXTINF:-1 group-title=\"Filmes\",Filme Aurora\nhttps://media.example.test/movie/2.mp4\n" +
+        "#EXTINF:-1 group-title=\"Séries\",Nebula S01E02 - Novo Mundo\nhttps://media.example.test/series/3.mp4\n",
+        "https://media.example.test/mixed.m3u");
+      assert("Classifica canais, filmes e séries por grupo e caminho",
+        classified[0].mediaType === "live" && classified[1].mediaType === "movie" &&
+        classified[2].mediaType === "series");
+      assert("Extrai nome da série e episódio de títulos SxxExx",
+        classified[2].seriesTitle === "Nebula" && classified[2].seasonNumber === 1 &&
+        classified[2].episodeNumber === 2);
+      assert("Gera identificador determinístico por fonte",
+        parsed[0].id === window.NexoraMediaSource.parse(sample, "https://media.example.test/library.m3u")[0].id &&
+        parsed[0].id !== window.NexoraMediaSource.parse(sample, "https://media.example.test/other.m3u")[0].id);
+
+      var invalidMessage = "";
+      try {
+        window.NexoraMediaSource.parse("#EXTM3U\n#EXTINF:-1,Sem endereço", "https://media.example.test/list.m3u");
+      } catch (error) {
+        invalidMessage = error.message;
+      }
+      assert("Rejeita lista vazia ou malformada", invalidMessage.indexOf("não contém entradas válidas") !== -1);
+
+      responses.push({ status: 200, body: sample });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error, entries) {
+        assert("Sem histórico, tenta carregar diretamente primeiro",
+          requests[0].method === "GET" &&
+          requests[0].url === "https://media.example.test/library.m3u");
+        assert("Carrega entradas pela conexão direta", !error && entries.length === 2);
+        assert("Memoriza somente a rota para o servidor",
+          window.NexoraMediaLibrary.getPreferredRoute("https://media.example.test") === "direct");
+      });
+
+      responses.push({ error: true });
+      responses.push({ status: 200, body: sample });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error, entries) {
+        assert("Usa o Worker remoto quando a conexão direta falha",
+          !error && entries.length === 2 && requests[1].method === "GET" &&
+          requests[2].method === "GET" &&
+          requests[2].url === "https://axion-proxy.example.workers.dev/playlist" &&
+          requests[2].headers.Authorization === "Bearer fixture-token-not-a-real-secret" &&
+          requests[2].headers["X-Playlist-URL"] === "https://media.example.test/library.m3u");
+        assert("Memoriza a rota remota depois de sucesso",
+          window.NexoraMediaLibrary.getPreferredRoute("https://media.example.test") === "worker");
+      });
+
+      responses.push({ error: true });
+      responses.push({ status: 200, body: sample });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error, entries) {
+        assert("Começa pela rota memorizada e tenta a direta uma vez",
+          !error && entries.length === 2 && requests[3].url ===
+            "https://axion-proxy.example.workers.dev/playlist" &&
+          requests[4].url === "https://media.example.test/library.m3u");
+        assert("Atualiza a preferência após sucesso da rota alternativa",
+          window.NexoraMediaLibrary.getPreferredRoute("https://media.example.test") === "direct");
+      });
+
+      responses.push({ status: 200, body: "#EXTM3U\n" });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error) {
+        assert("Não repete pelo Worker uma resposta obtida que não é M3U válida",
+          !!error && error.message.indexOf("playlist não contém entradas válidas") !== -1 &&
+          requests.length === 6);
+      });
+
+      responses.push({ error: true });
+      responses.push({ status: 502, body: "erro com URL e token que não deve ser exibido" });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error) {
+        assert("Mostra mensagem simples se direto e Worker falham",
+          !!error && error.message.indexOf("Verifique o endereço e a conexão") !== -1 &&
+          error.message.indexOf("media.example.test") === -1 &&
+          error.message.indexOf("token") === -1 && requests.length === 8);
+      });
+
+      window.AXION_CONFIG = { workerUrl: "", workerToken: "" };
+      responses.push({ status: 200, body: sample });
+      window.NexoraMediaSource.load("https://media.example.test/library.m3u", function (error) {
+        assert("Sem configuração local, segue funcionando pela conexão direta",
+          !error && requests.length === 9 &&
+          requests[8].url === "https://media.example.test/library.m3u");
+      });
+
+      window.mediaSourceFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

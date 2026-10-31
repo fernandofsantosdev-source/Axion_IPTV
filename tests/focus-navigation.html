@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de navegação por foco</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <style>
+    .test-row { display: flex; }
+    .test-control { width: 220px; height: 120px; margin: 24px; color: #fff; background: #101725; }
+    #lower-row { margin-left: 264px; }
+    #test-results { position: absolute; top: 50%; left: 5%; color: #fff; }
+  </style>
+</head>
+<body>
+  <main id="app-root" class="app-root">
+    <div class="test-row">
+      <button id="first" class="test-control" data-focusable="true">Primeiro</button>
+      <button id="second" class="test-control" data-focusable="true">Segundo</button>
+      <button id="third" class="test-control" data-focusable="true">Terceiro</button>
+    </div>
+    <div id="lower-row" class="test-row">
+      <button id="fourth" class="test-control" data-focusable="true">Quarto</button>
+    </div>
+    <div id="test-results" aria-live="polite">Fixture pronta</div>
+  </main>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script>
+    window.testFocus = window.NexoraFocus.create(document.getElementById("app-root"));
+    window.confirmCount = 0;
+    document.getElementById("first").addEventListener("click", function () {
+      window.confirmCount += 1;
+    });
+  </script>
+</body>
+</html>

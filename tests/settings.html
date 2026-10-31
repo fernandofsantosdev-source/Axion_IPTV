@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste das configurações AXION</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/settings.css">
+</head>
+<body>
+  <main id="app-root" class="app-root"></main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/settings.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = document.getElementById("app-root");
+      var storage = window.localStorage;
+      var values = {};
+      var fakeStorage = {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+        },
+        setItem: function (key, value) {
+          values[key] = String(value);
+        }
+      };
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        value: fakeStorage
+      });
+
+      var screen = window.NexoraSettings.createScreen();
+      root.appendChild(screen);
+      var input = screen.querySelector(".settings-input");
+      var status = screen.querySelector(".settings-status");
+
+      assert("Inicia sem fonte quando nenhuma URL foi salva", input.value === "");
+      assert("Oculta a URL da playlist para não exibir credenciais na tela",
+        input.type === "password" &&
+        screen.querySelector(".settings-url-toggle").textContent === "MOSTRAR");
+      screen.querySelector(".settings-url-toggle").click();
+      assert("Permite revelar a URL somente quando solicitado",
+        input.type === "text" &&
+        screen.querySelector(".settings-url-toggle").textContent === "OCULTAR");
+      screen.querySelector(".settings-url-toggle").click();
+      assert("Volta a ocultar a URL da playlist",
+        input.type === "password" &&
+        screen.querySelector(".settings-url-toggle").textContent === "MOSTRAR");
+      input.value = "https://media.example.test/library.m3u";
+      screen.querySelector(".settings-save").click();
+      assert("Salva e recarrega o endereço configurado",
+        window.NexoraMediaLibrary.getSettings().playlistUrl === input.value &&
+        status.textContent.indexOf("salvo") !== -1);
+      assert("Não exibe configuração de proxy",
+        screen.textContent.indexOf("WORKER") === -1 &&
+        screen.textContent.indexOf("TOKEN PRIVADO") === -1 &&
+        !screen.querySelector(".settings-save-worker") &&
+        !screen.querySelector("#worker-url") &&
+        !screen.querySelector("#worker-token"));
+      assert("Não oferece métodos para salvar credenciais do Worker",
+        typeof window.NexoraMediaLibrary.saveWorkerSettings === "undefined" &&
+        typeof window.NexoraMediaLibrary.normalizeWorkerUrl === "undefined");
+
+      input.value = "arquivo-local.m3u";
+      screen.querySelector(".settings-save").click();
+      assert("Rejeita URL que não é HTTP ou HTTPS",
+        status.className.indexOf("is-error") !== -1 &&
+        window.NexoraMediaLibrary.getSettings().playlistUrl === "https://media.example.test/library.m3u");
+
+      fakeStorage.setItem = function () {
+        throw new Error("quota");
+      };
+      input.value = "https://media.example.test/library.m3u";
+      screen.querySelector(".settings-save").click();
+      assert("Mostra erro quando o armazenamento falha",
+        status.className.indexOf("is-error") !== -1 &&
+        status.textContent.indexOf("armazenamento local") !== -1);
+
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        value: storage
+      });
+      window.settingsFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

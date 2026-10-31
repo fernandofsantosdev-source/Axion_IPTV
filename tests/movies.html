@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste do catálogo de filmes</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/live-tv.css">
+  <link rel="stylesheet" href="../styles/movies.css">
+</head>
+<body>
+  <main id="app-root" class="app-root"></main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/movies.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = document.getElementById("app-root");
+      var storageValues = {};
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        value: {
+          getItem: function (key) {
+            return Object.prototype.hasOwnProperty.call(storageValues, key) ? storageValues[key] : null;
+          },
+          setItem: function (key, value) {
+            storageValues[key] = String(value);
+          }
+        }
+      });
+      var screen = window.NexoraMovies.createScreen();
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      root.appendChild(screen);
+      assert("Exibe catálogo local fictício", screen.querySelectorAll("[data-movie-id]").length === 8);
+      assert("Mantém somente os filtros fixos sem categorias M3U",
+        screen.querySelectorAll("[data-genre-id]").length === 3 &&
+        !!screen.querySelector('[data-genre-id="all"]') &&
+        !!screen.querySelector('[data-genre-id="favorites"]') &&
+        !!screen.querySelector('[data-genre-id="continue"]') &&
+        screen.querySelector('.movies-genre[data-focused="true"]').getAttribute("data-genre-id") === "all");
+
+      var visible = screen.querySelectorAll("[data-movie-id]");
+      assert("Mostra todo o catálogo sem inventar gêneros ausentes da playlist",
+        visible.length === 8);
+
+      screen.querySelector('[data-movie-id="between-two-suns"]').click();
+      assert("Atualiza título e gênero nos detalhes",
+        screen.querySelector(".movie-detail-title").textContent === "Entre Dois Sóis" &&
+        screen.querySelector(".movie-detail-genre").textContent === "FICÇÃO CIENTÍFICA");
+      assert("Mostra duração, classificação e sinopse",
+        screen.querySelector(".movie-detail-duration").textContent === "2h 01min" &&
+        screen.querySelector(".movie-detail-rating").textContent === "12" &&
+        screen.querySelector(".movie-detail-synopsis").textContent.indexOf("engenheira") !== -1);
+      assert("Não cria elementos de mídia",
+        !screen.querySelector("video, audio, iframe, source, img"));
+
+      var sourceEntries = [];
+      var sourceScreen;
+      var search;
+      var inputEvent;
+      var i;
+      for (i = 0; i < 20; i += 1) {
+        sourceEntries.push({
+          id: "source-" + i,
+          title: i === 0 ? "Ação do Oceano" : "Filme " + i,
+          category: i % 2 ? "Drama" : "Aventura",
+          duration: "1h 30min",
+          accent: "cyan",
+          url: "https://media.example.test/" + i + ".mp4"
+        });
+      }
+      window.NexoraMovies.setEntries(sourceEntries);
+      root.removeChild(screen);
+      sourceScreen = window.NexoraMovies.createScreen();
+      root.appendChild(sourceScreen);
+      assert("Renderiza apenas uma página da lista extensa",
+        sourceScreen.querySelectorAll(".movie-card").length === 8 &&
+        sourceScreen.querySelectorAll(".movies-page-button[data-focusable]").length === 2);
+      assert("Monta filtros com as categorias da fonte",
+        sourceScreen.querySelectorAll("[data-genre-id]").length === 5);
+
+      search = sourceScreen.querySelector(".movies-search");
+      search.value = "ACAO";
+      inputEvent = document.createEvent("HTMLEvents");
+      inputEvent.initEvent("input", true, false);
+      search.dispatchEvent(inputEvent);
+      assert("Busca por título ignora maiúsculas e acentos",
+        sourceScreen.querySelectorAll(".movie-card").length === 1 &&
+        sourceScreen.querySelector(".movie-card-title").textContent === "Ação do Oceano");
+
+      search.value = "nada existe";
+      search.dispatchEvent(inputEvent);
+      assert("Mostra estado vazio para busca sem resultados",
+        sourceScreen.querySelector(".movies-empty").textContent === "Nenhum filme encontrado.");
+
+      search.value = "";
+      search.dispatchEvent(inputEvent);
+      sourceScreen.querySelector(".movies-page-button:last-child").click();
+      assert("Navega páginas e mantém os controles acessíveis ao foco remoto",
+        sourceScreen.querySelector(".movies-page-status").textContent === "2 / 3" &&
+        sourceScreen.querySelectorAll(".movie-card").length === 8 &&
+        sourceScreen.querySelector(".movies-page-button:last-child").getAttribute("data-focusable") !== null);
+      sourceScreen.querySelector('[data-genre-id="source-1"]').click();
+      assert("Filtra títulos pela categoria M3U selecionada",
+        sourceScreen.querySelectorAll(".movie-card").length === 8 &&
+        sourceScreen.querySelector(".movie-card-genre").textContent === "Aventura");
+
+      var selectedEntry = null;
+      var fixturePlayer = document.createElement("section");
+      fixturePlayer.className = "fixture-player-screen";
+      window.NexoraPlayerScreen = {
+        createScreen: function (entry) {
+          selectedEntry = entry;
+          return fixturePlayer;
+        }
+      };
+      sourceScreen.querySelector(".movie-play-button").click();
+      assert("Inicia o título selecionado pelo botão Assistir",
+        selectedEntry && selectedEntry.id === "source-0" &&
+        root.firstChild === fixturePlayer);
+
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+      window.moviesFixtureResults = results;
+    }());
+  </script>
+</body>
+</html>

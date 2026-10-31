@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste dos adaptadores de reprodução</title>
+</head>
+<body>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script src="../scripts/player-adapter.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var avEvents = [];
+      var avProgress = null;
+      var avListener;
+      var avplay = {
+        setListener: function (listener) { avListener = listener; },
+        open: function (url) { avEvents.push("open:" + url); },
+        setDisplayRect: function () { avEvents.push("display"); },
+        prepareAsync: function (ready) { avEvents.push("prepare"); ready(); },
+        play: function () { avEvents.push("play"); },
+        pause: function () { avEvents.push("pause"); },
+        seekTo: function (position) { avEvents.push("seek:" + position); },
+        getCurrentTime: function () { return 12000; },
+        getDuration: function () { return 60000; },
+        stop: function () { avEvents.push("stop"); },
+        close: function () { avEvents.push("close"); }
+      };
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      var avStates = [];
+      var avAdapter = window.NexoraPlayer.createAdapter({
+        avplay: avplay,
+        handlers: {
+          onState: function (state) { avStates.push(state); },
+          onProgress: function (position, duration) {
+            avProgress = { position: position, duration: duration };
+          }
+        }
+      });
+      avAdapter.open("https://media.example.test/movie.mp4");
+      assert("Seleciona AVPlay e inicia após preparação",
+        avAdapter.getPlatform() === "avplay" &&
+        avEvents.indexOf("open:https://media.example.test/movie.mp4") !== -1 &&
+        avStates.indexOf("playing") !== -1);
+      avListener.oncurrentplaytime(12000);
+      assert("Reporta posição e duração AVPlay em segundos",
+        avProgress.position === 12 && avProgress.duration === 60);
+      avAdapter.pause();
+      avAdapter.seek(90);
+      assert("Pausa e limita seek à duração disponível",
+        avEvents.indexOf("pause") !== -1 && avEvents.indexOf("seek:60000") !== -1);
+      avAdapter.close();
+      assert("Fecha AVPlay ao sair do player",
+        avEvents.indexOf("stop") !== -1 && avEvents.indexOf("close") !== -1 &&
+        avAdapter.getState() === "closed");
+
+      var avFailure = "";
+      var failedAdapter = window.NexoraPlayer.createAdapter({
+        avplay: {
+          setListener: function () {},
+          open: function () {},
+          prepareAsync: function (ready, fail) { fail(new Error("unsupported")); },
+          close: function () {}
+        },
+        handlers: {
+          onError: function (error) { avFailure = error.message; }
+        }
+      });
+      failedAdapter.open("https://media.example.test/unsupported.mkv");
+      assert("Propaga falha de preparação do AVPlay",
+        failedAdapter.getState() === "error" && avFailure === "unsupported");
+
+      function FakeVideo() {
+        this.listeners = {};
+        this.readyState = 0;
+        this.duration = 100;
+        this.currentTime = 0;
+        this.ended = false;
+        this.playCount = 0;
+        this.pauseCount = 0;
+        this.removedSource = false;
+      }
+      FakeVideo.prototype.addEventListener = function (name, callback) {
+        this.listeners[name] = this.listeners[name] || [];
+        this.listeners[name].push(callback);
+      };
+      FakeVideo.prototype.removeEventListener = function (name, callback) {
+        var listeners = this.listeners[name] || [];
+        this.listeners[name] = listeners.filter(function (listener) { return listener !== callback; });
+      };
+      FakeVideo.prototype.dispatch = function (name) {
+        var listeners = this.listeners[name] || [];
+        listeners.slice(0).forEach(function (listener) { listener(); });
+      };
+      FakeVideo.prototype.load = function () {};
+      FakeVideo.prototype.play = function () {
+        this.playCount += 1;
+      };
+      FakeVideo.prototype.pause = function () {
+        this.pauseCount += 1;
+        this.dispatch("pause");
+      };
+      FakeVideo.prototype.removeAttribute = function (name) {
+        if (name === "src") {
+          this.removedSource = true;
+        }
+      };
+
+      var video = new FakeVideo();
+      var videoProgress = null;
+      var videoError = "";
+      var videoAdapter = window.NexoraPlayer.createAdapter({
+        videoElement: video,
+        handlers: {
+          onProgress: function (position, duration) {
+            videoProgress = { position: position, duration: duration };
+          },
+          onError: function (error) { videoError = error.message; }
+        }
+      });
+      videoAdapter.open("https://media.example.test/movie.mp4");
+      video.dispatch("canplay");
+      assert("Usa o vídeo do navegador e inicia ao ficar pronto",
+        videoAdapter.getPlatform() === "video" && video.playCount === 1 &&
+        videoAdapter.getState() === "playing");
+      video.currentTime = 25;
+      video.dispatch("timeupdate");
+      videoAdapter.pause();
+      videoAdapter.seek(35);
+      assert("Reporta progresso e controla pausa/seek no navegador",
+        videoProgress.position === 35 && videoProgress.duration === 100 &&
+        video.pauseCount === 1 && video.currentTime === 35);
+      video.dispatch("error");
+      assert("Propaga erro de mídia do navegador",
+        videoAdapter.getState() === "error" && videoError.indexOf("formato") !== -1);
+      videoAdapter.close();
+      assert("Remove a origem e fecha o elemento de vídeo",
+        video.removedSource && videoAdapter.getState() === "closed");
+
+      window.playerAdapterFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

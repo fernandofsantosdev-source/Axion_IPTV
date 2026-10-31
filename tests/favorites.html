@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de Favoritos AXION</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/movies.css">
+</head>
+<body>
+  <main id="app-root" class="app-root"></main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script>
+    window.favoriteFixtureStorage = { values: {} };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(window.favoriteFixtureStorage.values, key) ?
+            window.favoriteFixtureStorage.values[key] : null;
+        },
+        setItem: function (key, value) {
+          window.favoriteFixtureStorage.values[key] = String(value);
+        }
+      }
+    });
+  </script>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/movies.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = document.getElementById("app-root");
+      var entries = [
+        { id: "entry-1", title: "Filme de Teste Um", category: "Drama", url: "https://media.example.test/1.mp4" },
+        { id: "entry-2", title: "Filme de Teste Dois", category: "Aventura", url: "https://media.example.test/2.mp4" }
+      ];
+      var screen;
+      var storedLibrary;
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      function showScreen() {
+        if (root.firstChild) {
+          root.removeChild(root.firstChild);
+        }
+        screen = window.NexoraMovies.createScreen();
+        root.appendChild(screen);
+        return screen;
+      }
+
+      window.NexoraMovies.setEntries(entries);
+      showScreen();
+      screen.querySelector(".movie-favorite-button").click();
+      storedLibrary = window.NexoraMediaLibrary.getLibrary();
+      assert("Salva um favorito no armazenamento local",
+        storedLibrary.favorites.length === 1 && storedLibrary.favorites[0] === "entry-1" &&
+        screen.querySelector(".movie-favorite-button").getAttribute("aria-pressed") === "true");
+
+      showScreen();
+      assert("Mantém o favorito após recriar a tela",
+        screen.querySelector(".movie-favorite-button").textContent === "REMOVER DOS FAVORITOS");
+      screen.querySelector('[data-genre-id="favorites"]').click();
+      assert("Exibe o título na coleção Favoritos",
+        screen.querySelectorAll(".movie-card").length === 1 &&
+        screen.querySelector(".movie-card").getAttribute("data-movie-id") === "entry-1");
+
+      window.NexoraMediaLibrary.setFavorite("removed-source-entry", true);
+      showScreen();
+      screen.querySelector('[data-genre-id="favorites"]').click();
+      assert("Mantém entradas indisponíveis fora das ações da coleção",
+        screen.querySelectorAll(".movie-card").length === 1 &&
+        !screen.querySelector('[data-movie-id="removed-source-entry"]'));
+      screen.querySelector(".movie-favorite-button").click();
+      assert("Remove favorito e salva a alteração",
+        window.NexoraMediaLibrary.getFavorites().indexOf("entry-1") === -1 &&
+        screen.querySelector(".movies-empty").textContent ===
+          "Nenhum título favorito disponível nesta lista.");
+
+      screen.querySelector('[data-genre-id="all"]').click();
+      screen.querySelector('[data-movie-id="entry-2"]').click();
+      window.localStorage.setItem = function () {
+        throw new Error("quota");
+      };
+      screen.querySelector(".movie-favorite-button").click();
+      assert("Mostra erro e não confirma favorito quando o armazenamento falha",
+        screen.querySelector(".movies-library-status").className.indexOf("is-error") !== -1 &&
+        screen.querySelector(".movies-library-status").textContent.indexOf("armazenamento local") !== -1 &&
+        screen.querySelector(".movie-favorite-button").getAttribute("aria-pressed") === "false");
+
+      window.favoriteFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

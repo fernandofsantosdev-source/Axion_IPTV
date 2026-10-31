@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste da tela TV ao vivo</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/live-tv.css">
+</head>
+<body>
+  <main id="app-root" class="app-root"></main>
+  <div id="test-results" role="status" aria-live="polite">Executando verificações...</div>
+  <script>
+    window.liveTvFixtureStorage = { values: {} };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(window.liveTvFixtureStorage.values, key) ?
+            window.liveTvFixtureStorage.values[key] : null;
+        },
+        setItem: function (key, value) {
+          window.liveTvFixtureStorage.values[key] = String(value);
+        }
+      }
+    });
+  </script>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/live-tv.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = document.getElementById("app-root");
+      var view = window.NexoraLiveTv.createScreen();
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      root.appendChild(view);
+
+      var categories = view.querySelectorAll("[data-category-id]");
+      var channels = view.querySelectorAll("[data-channel-id]");
+      assert("Exibe categorias, favoritos e canais fictícios",
+        categories.length === 5 && channels.length === 6 &&
+        !!view.querySelector('[data-category-id="favorites"]'));
+
+      view.querySelector('[data-category-id="cinema"]').click();
+      channels = view.querySelectorAll("[data-channel-id]");
+      assert("Filtra canais pela categoria", channels.length === 2 &&
+        channels[0].getAttribute("data-channel-id") === "orbita" &&
+        channels[1].getAttribute("data-channel-id") === "cinemax");
+      assert("Mantém uma única lista de categorias",
+        view.querySelectorAll("[data-category-id]").length === 5);
+
+      view.querySelector('[data-channel-id="cinemax"]').click();
+      assert("Atualiza os dados do canal selecionado",
+        view.querySelector(".live-selected-name").textContent === "Cine Neon");
+      assert("Atualiza a programação do canal",
+        view.querySelector(".live-program-title").textContent === "Frequência Azul");
+      assert("Mantém prévia inerte sem elemento de mídia",
+        view.querySelector(".live-preview-note").textContent.indexOf("sem reprodução") !== -1 &&
+        !view.querySelector("video, audio, iframe, source"));
+      view.querySelector(".live-favorite-button").click();
+      assert("Salva canal ao vivo nos favoritos",
+        window.NexoraMediaLibrary.getFavorites().indexOf("cinemax") !== -1 &&
+        view.querySelector(".live-favorite-button").getAttribute("aria-pressed") === "true");
+      view.querySelector('[data-category-id="favorites"]').click();
+      assert("Filtra canais favoritos",
+        view.querySelectorAll("[data-channel-id]").length === 1 &&
+        view.querySelector("[data-channel-id]").getAttribute("data-channel-id") === "cinemax" &&
+        !!view.querySelector(".live-channel-favorite"));
+      view.querySelector(".live-favorite-button").click();
+      assert("Remove canal dos favoritos e mostra lista vazia",
+        window.NexoraMediaLibrary.getFavorites().indexOf("cinemax") === -1 &&
+        view.querySelector(".live-detail").textContent.indexOf("Nenhum canal favorito") !== -1);
+      view.querySelector('[data-category-id="cinema"]').click();
+      view.querySelector('[data-channel-id="cinemax"]').click();
+
+      window.NexoraMediaSource = {
+        getEntries: function () { return null; },
+        setEntries: function () {},
+        loadConfigured: function (callback) {
+          callback(new Error("A prévia não conseguiu carregar a playlist."), null);
+        }
+      };
+      root.removeChild(view);
+      view = window.NexoraLiveTv.createScreen();
+      root.appendChild(view);
+      assert("Falha da playlist não apresenta canais fictícios como se fossem reais",
+        view.querySelectorAll("[data-channel-id]").length === 0 &&
+        view.querySelector(".live-selected-name") === null &&
+        view.querySelector(".live-source-error").textContent.indexOf("prévia") !== -1 &&
+        view.querySelector(".live-status").textContent === "ERRO AO CARREGAR CANAIS");
+      assert("Oferece nova tentativa após erro no carregamento",
+        !!view.querySelector(".live-watch-button") &&
+        view.querySelector(".live-watch-button").textContent === "TENTAR NOVAMENTE");
+
+      window.NexoraMediaSource = null;
+      root.removeChild(view);
+      view = window.NexoraLiveTv.createScreen();
+      root.appendChild(view);
+      window.NexoraLiveTv.setEntries([
+        {
+          id: "real-live-channel",
+          title: "Canal Aurora",
+          category: "Notícias",
+          mediaType: "live",
+          url: "https://media.example.test/live/1.ts"
+        },
+        {
+          id: "real-movie-entry",
+          title: "Filme Aurora",
+          category: "Filmes",
+          mediaType: "movie",
+          url: "https://media.example.test/movie/2.mp4"
+        }
+      ]);
+      root.removeChild(view);
+      view = window.NexoraLiveTv.createScreen();
+      root.appendChild(view);
+      assert("Usa somente entradas classificadas como canais da playlist",
+        view.querySelectorAll("[data-channel-id]").length === 1 &&
+        view.querySelector("[data-channel-id]").textContent.indexOf("Canal Aurora") !== -1 &&
+        view.querySelector(".live-status").textContent === "CANAIS DA PLAYLIST");
+      assert("Oferece reprodução para um canal do usuário",
+        !!view.querySelector(".live-watch-button") &&
+        view.querySelector(".live-preview-note").textContent === "Canal da sua playlist");
+      view.querySelector(".live-favorite-button").click();
+      assert("Salva canal real da playlist nos favoritos",
+        window.NexoraMediaLibrary.getFavorites().indexOf("real-live-channel") !== -1);
+      view.querySelector('[data-category-id="favorites"]').click();
+      assert("Mostra o canal da playlist na categoria Favoritos",
+        view.querySelectorAll("[data-channel-id]").length === 1 &&
+        view.querySelector(".live-channel-name").textContent === "Canal Aurora");
+
+      window.liveTvFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

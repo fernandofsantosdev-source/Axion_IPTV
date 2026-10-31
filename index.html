@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05070c">
+  <title>AXION</title>
+  <link rel="stylesheet" href="styles/app.css?v=2">
+  <link rel="stylesheet" href="styles/live-tv.css?v=5">
+  <link rel="stylesheet" href="styles/movies.css?v=3">
+  <link rel="stylesheet" href="styles/series.css?v=2">
+  <link rel="stylesheet" href="styles/player.css?v=1">
+  <link rel="stylesheet" href="styles/settings.css?v=3">
+</head>
+<body>
+  <main id="app-root" class="app-root">
+    <section class="home-screen" aria-label="Tela inicial do AXION">
+      <div class="city-backdrop" aria-hidden="true"></div>
+      <div class="header-lines" aria-hidden="true">
+        <span class="header-line header-line-left"></span>
+        <span class="header-line header-line-right"></span>
+      </div>
+
+      <header class="home-header">
+        <div class="brand" aria-label="AXION IPTV Player">
+          <div class="brand-name">A<span class="brand-x">X</span>ION</div>
+          <div class="brand-subtitle">IPTV PLAYER</div>
+        </div>
+        <div class="system-info">
+          <svg class="wifi-icon" viewBox="0 0 32 28" aria-hidden="true">
+            <path d="M3 9.5a20 20 0 0 1 26 0M8 15a12.5 12.5 0 0 1 16 0M13 20a5 5 0 0 1 6 0" />
+            <circle cx="16" cy="24" r="1.7" />
+          </svg>
+          <div class="clock">
+            <time id="clock-time">19:42</time>
+            <span id="clock-date">30 de Out de 2026</span>
+          </div>
+        </div>
+      </header>
+
+      <nav class="home-menu" aria-label="Menu principal">
+        <button class="menu-card menu-card-live is-focused" type="button" data-focusable="true" data-focused="true">
+          <svg class="menu-icon" viewBox="0 0 72 72" aria-hidden="true">
+            <path d="M22 18 13 9M50 18l9-9M36 17V7M13 23h46a7 7 0 0 1 7 7v29a7 7 0 0 1-7 7H13a7 7 0 0 1-7-7V30a7 7 0 0 1 7-7Z" />
+            <path class="icon-fill" d="m31 34 15 9-15 9z" />
+          </svg>
+          <span class="card-title">TV AO VIVO</span>
+          <span class="card-description">Canais de TV</span>
+          <span class="card-chevron" aria-hidden="true"></span>
+        </button>
+
+        <button class="menu-card menu-card-movies" type="button" data-focusable="true">
+          <svg class="menu-icon" viewBox="0 0 72 72" aria-hidden="true">
+            <rect x="7" y="10" width="58" height="52" rx="4" />
+            <path d="M22 10v52M50 10v52M7 25h15M50 25h15M7 47h15M50 47h15" />
+          </svg>
+          <span class="card-title">FILMES</span>
+          <span class="card-description">Lançamentos e clássicos</span>
+          <span class="card-chevron" aria-hidden="true"></span>
+        </button>
+
+        <button class="menu-card menu-card-series" type="button" data-focusable="true">
+          <svg class="menu-icon" viewBox="0 0 72 72" aria-hidden="true">
+            <path d="m12 18 43-9a4 4 0 0 1 5 3l2 9-48 10-2-9a4 4 0 0 1 3-4Z" />
+            <path d="m25 15 5 10M43 11l5 10M12 30h49v31a5 5 0 0 1-5 5H17a5 5 0 0 1-5-5z" />
+            <path class="icon-fill" d="m31 39 15 9-15 9z" />
+          </svg>
+          <span class="card-title">SÉRIES</span>
+          <span class="card-description">Suas séries favoritas</span>
+          <span class="card-chevron" aria-hidden="true"></span>
+        </button>
+
+        <button class="menu-card menu-card-settings" type="button" data-focusable="true">
+          <svg class="menu-icon settings-icon" viewBox="0 0 72 72" aria-hidden="true">
+            <path d="M30 7h12l2 7a23 23 0 0 1 5 2l6-4 8 8-4 6a23 23 0 0 1 2 5l7 2v12l-7 2a23 23 0 0 1-2 5l4 6-8 8-6-4a23 23 0 0 1-5 2l-2 7H30l-2-7a23 23 0 0 1-5-2l-6 4-8-8 4-6a23 23 0 0 1-2-5l-7-2V33l7-2a23 23 0 0 1 2-5l-4-6 8-8 6 4a23 23 0 0 1 5-2z" transform="translate(0 1) scale(.92) translate(3 3)" />
+            <circle cx="36" cy="37" r="9" />
+          </svg>
+          <span class="card-title">CONFIGURAÇÕES</span>
+          <span class="card-description">Ajustes do aplicativo</span>
+          <span class="card-chevron" aria-hidden="true"></span>
+        </button>
+      </nav>
+
+      <footer class="home-footer">
+        <span class="footer-rule" aria-hidden="true"></span>
+        <span>SUA TV. DO SEU JEITO.</span>
+      </footer>
+    </section>
+  </main>
+  <script src="config.example.js?v=1"></script>
+  <script src="config.local.js" onerror="this.onerror=null;"></script>
+  <script src="scripts/focus-navigation.js?v=4"></script>
+  <script src="scripts/app.js?v=5"></script>
+  <script src="scripts/live-tv.js?v=4"></script>
+  <script src="scripts/movies.js?v=3"></script>
+  <script src="scripts/media-library.js?v=3"></script>
+  <script src="scripts/media-source.js?v=6"></script>
+  <script src="scripts/series.js?v=2"></script>
+  <script src="scripts/player-adapter.js?v=2"></script>
+  <script src="scripts/player-screen.js?v=2"></script>
+  <script src="scripts/settings.js?v=6"></script>
+  <script src="scripts/home.js?v=5"></script>
+</body>
+</html>

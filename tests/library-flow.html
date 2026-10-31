@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste do fluxo de biblioteca AXION</title>
+  <link rel="stylesheet" href="../styles/app.css">
+  <link rel="stylesheet" href="../styles/movies.css">
+  <link rel="stylesheet" href="../styles/player.css">
+  <link rel="stylesheet" href="../styles/settings.css">
+  <style>
+    .flow-home {
+      display: flex;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .flow-home button {
+      margin: 1vw;
+      padding: 1vw 2vw;
+    }
+  </style>
+</head>
+<body>
+  <main id="app-root" class="app-root">
+    <section class="flow-home">
+      <button class="flow-settings" type="button" data-focusable="true" data-focused="true">
+        Configurações
+      </button>
+      <button class="flow-movies" type="button" data-focusable="true">Filmes</button>
+      <button class="flow-live" type="button" data-focusable="true">TV ao vivo</button>
+      <button class="flow-series" type="button" data-focusable="true">Séries</button>
+    </section>
+  </main>
+  <div id="test-results" role="status" aria-live="polite">Executando fluxo integrado...</div>
+  <script>
+    window.flowFixtureStorage = { values: {} };
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: function (key) {
+          return Object.prototype.hasOwnProperty.call(window.flowFixtureStorage.values, key) ?
+            window.flowFixtureStorage.values[key] : null;
+        },
+        setItem: function (key, value) {
+          window.flowFixtureStorage.values[key] = String(value);
+        }
+      }
+    });
+
+    window.flowFixtureRequests = [];
+    window.XMLHttpRequest = function () {
+      this.readyState = 0;
+      this.status = 0;
+      this.responseText = "";
+    };
+    window.XMLHttpRequest.prototype.open = function (method, url) {
+      this.method = method;
+      this.url = url;
+      this.requestRecord = { method: method, url: url, body: "" };
+      window.flowFixtureRequests.push(this.requestRecord);
+    };
+    window.XMLHttpRequest.prototype.setRequestHeader = function () {};
+    window.XMLHttpRequest.prototype.send = function (body) {
+      this.requestRecord.body = body;
+      this.status = 200;
+      this.readyState = 4;
+      this.responseText = "#EXTM3U\n" +
+        "#EXTINF:-1 group-title=\"Drama\",Fluxo Neon\nhttps://media.example.test/movie/flow.mp4\n" +
+        "#EXTINF:-1 group-title=\"Notícias\",Canal Aurora\nhttps://media.example.test/live/1.ts\n" +
+        "#EXTINF:-1 group-title=\"Sci-Fi Séries\",Nebula S01E01 - Primeiro Sinal\n" +
+        "https://media.example.test/series/1.mp4";
+      this.onreadystatechange();
+    };
+  </script>
+  <script src="../scripts/focus-navigation.js"></script>
+  <script src="../scripts/app.js"></script>
+  <script src="../scripts/media-library.js"></script>
+  <script src="../scripts/media-source.js"></script>
+  <script src="../scripts/live-tv.js"></script>
+  <script src="../scripts/movies.js"></script>
+  <script src="../scripts/series.js"></script>
+  <script src="../scripts/player-adapter.js"></script>
+  <script src="../scripts/player-screen.js"></script>
+  <script src="../scripts/settings.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var results = [];
+      var root = window.NexoraApp.getRoot();
+      var createPlayerScreen = window.NexoraPlayerScreen.createScreen;
+      var playerHandlers;
+      var activeAdapter;
+      var resumePositions = [];
+      var closeCount = 0;
+
+      function assert(name, condition) {
+        results.push({ name: name, passed: !!condition });
+      }
+
+      function press(keyCode) {
+        var event = document.createEvent("Event");
+        event.initEvent("keydown", true, true);
+        Object.defineProperty(event, "keyCode", { get: function () { return keyCode; } });
+        document.dispatchEvent(event);
+      }
+
+      window.NexoraPlayerScreen.createScreen = function (entry, options) {
+        options = options || {};
+        resumePositions.push(Number(options.resumePosition) || 0);
+        options.adapterFactory = function (handlers) {
+          playerHandlers = handlers;
+          activeAdapter = {
+            position: 0,
+            duration: 100,
+            state: "idle",
+            open: function () {
+              activeAdapter.state = "playing";
+              handlers.onState("playing");
+            },
+            play: function () {
+              activeAdapter.state = "playing";
+              handlers.onState("playing");
+            },
+            pause: function () {
+              activeAdapter.state = "paused";
+              handlers.onState("paused");
+            },
+            seek: function (position) {
+              activeAdapter.position = Math.max(0, Math.min(100, position));
+              handlers.onProgress(activeAdapter.position, activeAdapter.duration);
+            },
+            getPosition: function () { return activeAdapter.position; },
+            getDuration: function () { return activeAdapter.duration; },
+            close: function () {
+              closeCount += 1;
+              activeAdapter.state = "closed";
+              handlers.onState("closed");
+            }
+          };
+          return activeAdapter;
+        };
+        return createPlayerScreen(entry, options);
+      };
+
+      root.querySelector(".flow-settings").addEventListener("click", function () {
+        window.NexoraApp.mountScreen(window.NexoraSettings.createScreen());
+      });
+      root.querySelector(".flow-movies").addEventListener("click", function () {
+        window.NexoraApp.mountScreen(window.NexoraMovies.createScreen());
+      });
+      root.querySelector(".flow-live").addEventListener("click", function () {
+        window.NexoraApp.mountScreen(window.NexoraLiveTv.createScreen());
+      });
+      root.querySelector(".flow-series").addEventListener("click", function () {
+        window.NexoraApp.mountScreen(window.NexoraSeries.createScreen());
+      });
+
+      press(13);
+      assert("Abre Configurações pelo controle remoto",
+        !!root.querySelector(".settings-input"));
+      root.querySelector(".settings-input").value = "https://playlist.example.test/movies.m3u";
+      root.querySelector(".settings-reload").click();
+      assert("Carrega a playlist M3U simulada pela conexão direta",
+        root.querySelector(".settings-status").textContent === "3 entradas carregadas." &&
+        window.flowFixtureRequests.length === 1 &&
+        window.flowFixtureRequests[0].method === "GET" &&
+        window.flowFixtureRequests[0].url ===
+          "https://playlist.example.test/movies.m3u" &&
+        window.flowFixtureRequests[0].body === null);
+
+      press(10009);
+      press(39);
+      press(13);
+      assert("Abre Filmes pelo controle remoto", !!root.querySelector(".movies-screen"));
+      root.querySelector(".movies-search").value = "fluxo";
+      var inputEvent = document.createEvent("HTMLEvents");
+      inputEvent.initEvent("input", true, false);
+      root.querySelector(".movies-search").dispatchEvent(inputEvent);
+      assert("Pesquisa o título carregado da playlist",
+        root.querySelectorAll(".movie-card").length === 1 &&
+        root.querySelector(".movie-card-title").textContent === "Fluxo Neon");
+
+      root.querySelector(".movie-favorite-button").click();
+      root.querySelector('[data-genre-id="favorites"]').click();
+      assert("Salva e exibe o filme em Favoritos",
+        root.querySelectorAll(".movie-card").length === 1 &&
+        window.NexoraMediaLibrary.getFavorites().length === 1);
+      root.querySelector(".movie-play-button").click();
+      assert("Abre o player com os controles remotos focados",
+        !!root.querySelector(".player-screen") &&
+        root.querySelector(".player-play").getAttribute("data-focused") === "true");
+      press(13);
+      assert("Pausa e atualiza o player usando OK",
+        root.querySelector(".player-play").textContent === "CONTINUAR");
+      press(13);
+      activeAdapter.position = 25;
+      playerHandlers.onProgress(25, 100);
+      press(10009);
+      assert("Salva progresso e retorna ao catálogo por Voltar",
+        !!root.querySelector(".movies-screen") &&
+        root.querySelector(".movie-play-button").textContent === "CONTINUAR ASSISTINDO");
+
+      root.querySelector(".movie-play-button").click();
+      assert("Retoma a partir da posição salva",
+        resumePositions[1] === 25 && activeAdapter.position === 25);
+      press(10009);
+      assert("Voltar fecha o player sem solicitar mídia real",
+        closeCount === 2 && !root.querySelector("video[src]") &&
+        window.flowFixtureRequests.length === 1);
+
+      window.NexoraApp.goBack();
+      root.querySelector(".flow-live").click();
+      assert("Exibe canais reais da playlist no lugar do catálogo ilustrativo",
+        root.querySelectorAll(".live-channel").length === 1 &&
+        root.querySelector(".live-channel-name").textContent === "Canal Aurora");
+      root.querySelector(".live-favorite-button").click();
+      assert("Favorita canal da playlist e salva no armazenamento local",
+        window.NexoraMediaLibrary.getFavorites().indexOf(
+          window.NexoraMediaSource.getEntries().filter(function (entry) {
+            return entry.mediaType === "live";
+          })[0].id) !== -1);
+      root.querySelector('[data-category-id="favorites"]').click();
+      assert("Filtra o canal salvo na categoria Favoritos",
+        root.querySelectorAll(".live-channel").length === 1 &&
+        root.querySelector(".live-channel-name").textContent === "Canal Aurora");
+      root.querySelector(".live-watch-button").click();
+      assert("Abre o player ao selecionar um canal ao vivo",
+        !!root.querySelector(".player-screen") && activeAdapter.state === "playing");
+      press(10009);
+      window.NexoraApp.goBack();
+      root.querySelector(".flow-series").click();
+      assert("Abre a biblioteca de séries da playlist",
+        root.querySelectorAll(".series-item").length === 1 &&
+        root.querySelector(".series-item .movie-card-title").textContent === "Nebula");
+      root.querySelector(".series-watch-button").click();
+      assert("Inicia um episódio pelo controle Assistir episódio",
+        !!root.querySelector(".player-screen") &&
+        resumePositions[3] === 0 && activeAdapter.state === "playing");
+
+      window.libraryFlowFixtureResults = results;
+      document.getElementById("test-results").textContent = results.every(function (result) {
+        return result.passed;
+      }) ? "PASSOU: " + results.length + " verificações" : "FALHOU: " + results.filter(function (result) {
+        return !result.passed;
+      }).map(function (result) {
+        return result.name;
+      }).join(", ");
+    }());
+  </script>
+</body>
+</html>

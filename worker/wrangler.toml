@@ -1,0 +1,16 @@
+name = "axion-playlist-proxy"
+main = "src/index.mjs"
+compatibility_date = "2026-10-31"
+workers_dev = true
+
+[vars]
+ALLOWED_HOSTS = ""
+APP_ORIGINS = ""
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
